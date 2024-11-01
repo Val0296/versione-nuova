@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoraggio Macchinari</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        input, select, button {
+            margin: 5px 0;
+            padding: 8px;
+            width: calc(100% - 16px);
+            box-sizing: border-box;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #dashboard, #gestioneMacchinari, #report, #pezziRicambio {
+            display: none;
+        }
+        img {
+            max-width: 50px; /* Limita la larghezza dell'immagine */
+            max-height: 50px; /* Limita l'altezza dell'immagine */
+            margin-left: 10px; /* Distanza dall'elemento precedente */
+        }
+        @media (min-width: 600px) {
+            input, select, button {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Monitoraggio Macchinari</h1>
+
+    <h2>Macchinari Disponibili</h2>
+    <select id="macchinario" onchange="visualizzaSelezione()">
+        <option value="">-- Seleziona --</option>
+    </select>
+
+    <label for="litri">Litri di gasolio:</label>
+    <input type="number" id="litri" placeholder="Litri" min="0" />
+    <button onclick="aggiungiRegistrazione()">Aggiungi Registrazione</button>
+
+    <div id="login">
+        <h2>Login</h2>
+        <label for="username">Username:</label>
+        <input type="text" id="username" />
+        <button onclick="login()">Accedi</button>
+        <div id="loginError" style="color: red;"></div>
+    </div>
+
+    <div id="menu" style="display: none;">
+        <button onclick="mostraDashboard()">Dashboard</button>
+        <button onclick="mostraReport()">Report</button>
+        <button onclick="mostraGestioneMacchinari()">Gestione Macchinari</button>
+        <button onclick="mostraPezziRicambio()">Pezzi di Ricambio</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <div id="gestioneMacchinari">
+        <h3>Gestione Macchinari</h3>
+        <h4>Aggiungi Macchinario</h4>
+        <input type="text" id="nuovoMacchinario" placeholder="Nome Macchinario" />
+        <button onclick="aggiungiMacchinario()">Aggiungi</button>
+
+        <h4>Modifica Macchinario</h4>
+        <input type="text" id="nuovoNomeMacchinario" placeholder="Nuovo Nome Macchinario" />
+        <button onclick="modificaMacchinario()">Modifica</button>
+    </div>
+
+    <div id="dashboard">
+        <h2>Dashboard</h2>
+        <h3>Registrazioni</h3>
+        <ul id="listaRegistrazioni"></ul>
+
+        <h3>Totale Litri per Macchinario:</h3>
+        <div id="totaliMacchinari"></div>
+
+        <h3>Statistiche</h3>
+        <div id="statistiche"></div>
+
+        <h3>Capacità Rimanente</h3>
+        <label for="capacitaBotteInput">Capacità Botte (Litri):</label>
+        <input type="number" id="capacitaBotteInput" value="2000" style="width: 80px;" onchange="aggiornaCapacitaRimanente()" />
+        <div id="capacitaRimanente"></div>
+
+        <h3>Grafico dei Consumi</h3>
+        <canvas id="graficoConsumi"></canvas>
+
+        <h3>Reset Dati</h3>
+        <button onclick="resettaDati()">Resetta Tutto</button>
+    </div>
+
+    <div id="report">
+        <h2>Report Completo</h2>
+        <div id="reportContent"></div>
+        <button onclick="salvaReport()">Salva Report</button>
+    </div>
+
+    <div id="pezziRicambio">
+        <h2>Pezzi di Ricambio</h2>
+        <input type="text" id="nuovoPezzo" placeholder="Nome Pezzo di Ricambio" />
+        <input type="file" id="fotoPezzo" accept="image/*" />
+        <input type="number" id="quantitaPezzo" placeholder="Quantità" min="1" />
+        <button onclick="aggiungiPezzo()">Aggiungi Pezzo</button>
+        <h3>Lista Pezzi di Ricambio</h3>
+        <ul id="listaPezzi"></ul>
+    </div>
+
+    <script>
+        let registrazioni = [];
+        const totaliMacchinari = {};
+        const usernameAutorizzato = "admin";
+        let loggedIn = false;
+        let macchinari = JSON.parse(localStorage.getItem('macchinari')) || [
+            "Escavatore", 
+            "Trattore", 
+            "Rullo Compattatore", 
+            "Pala Meccanica", 
+            "Camion", 
+            "Generatore", 
+            "Cisterna"
+        ];
+        let pezziRicambio = JSON.parse(localStorage.getItem('pezziRicambio')) || [];
+
+        function login() {
+            const username = document.getElementById("username").value.trim();
+            if (username === usernameAutorizzato) {
+                loggedIn = true;
+                document.getElementById("login").style.display = "none";
+                document.getElementById("menu").style.display = "block";
+                mostraDashboard();
+                aggiornaSelezioneMacchinari();
+            } else {
+                document.getElementById("loginError").innerText = "Username non valido.";
+            }
+        }
+
+        function logout() {
+            loggedIn = false;
+            document.getElementById("login").style.display = "block";
+            document.getElementById("menu").style.display = "none";
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("report").style.display = "none";
+            document.getElementById("gestioneMacchinari").style.display = "none";
+            document.getElementById("pezziRicambio").style.display = "none";
+            document.getElementById("loginError").innerText = '';
+        }
+
+        function mostraDashboard() {
+            document.getElementById("dashboard").style.display = "block";
+            document.getElementById("report").style.display = "none";
+            document.getElementById("gestioneMacchinari").style.display = "none";
+            document.getElementById("pezziRicambio").style.display = "none";
+        }
+
+        function mostraReport() {
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("report").style.display = "block";
+            document.getElementById("gestioneMacchinari").style.display = "none";
+            document.getElementById("pezziRicambio").style.display = "none";
+            generaReport();
+        }
+
+        function mostraGestioneMacchinari() {
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("report").style.display = "none";
+            document.getElementById("gestioneMacchinari").style.display = "block";
+            document.getElementById("pezziRicambio").style.display = "none";
+        }
+
+        function mostraPezziRicambio() {
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("report").style.display = "none";
+            document.getElementById("gestioneMacchinari").style.display = "none";
+            document.getElementById("pezziRicambio").style.display = "block";
+            aggiornaListaPezzi();
+        }
+
+        function aggiornaSelezioneMacchinari() {
+            const selectMacchinario = document.getElementById("macchinario");
+            selectMacchinario.innerHTML = '<option value="">-- Seleziona --</option>';
+            macchinari.forEach(macchina => {
+                const option = document.createElement("option");
+                option.value = macchina;
+                option.textContent = macchina;
+                selectMacchinario.appendChild(option);
+            });
+        }
+
+        function aggiungiRegistrazione() {
+            const macchinario = document.getElementById("macchinario").value;
+            const litri = parseFloat(document.getElementById("litri").value);
+            
+            if (!macchinario) {
+                alert("Seleziona un macchinario.");
+                return;
+            }
+            if (isNaN(litri) || litri <= 0) {
+                alert("Inserisci una quantità valida di litri.");
+                return;
+            }
+            
+            const registrazione = {
+                data: new Date(),
+                macchinario: macchinario,
+                litri: litri
+            };
+            registrazioni.push(registrazione);
+            if (!totaliMacchinari[macchinario]) {
+                totaliMacchinari[macchinario] = 0;
+            }
+            totaliMacchinari[macchinario] += litri;
+            localStorage.setItem('registrazioni', JSON.stringify(registrazioni));
+            document.getElementById("litri").value = '';
+            aggiornaDashboard();
+        }
+
+        function aggiornaDashboard() {
+            const listaRegistrazioni = document.getElementById("listaRegistrazioni");
+            listaRegistrazioni.innerHTML = '';
+            registrazioni.forEach((reg) => {
+                const li = document.createElement("li");
+                li.textContent = `${reg.data.toLocaleString()}: ${reg.macchinario} - ${reg.litri} litri`;
+                listaRegistrazioni.appendChild(li);
+            });
+            aggiornaTotaliMacchinari();
+            aggiornaGrafico();
+            aggiornaCapacitaRimanente();
+        }
+
+        function aggiornaTotaliMacchinari() {
+            const totaliDiv = document.getElementById("totaliMacchinari");
+            totaliDiv.innerHTML = '';
+            for (const [macchinario, totale] of Object.entries(totaliMacchinari)) {
+                const p = document.createElement("p");
+                p.textContent = `${macchinario}: ${totale} litri`;
+                totaliDiv.appendChild(p);
+            }
+        }
+
+        function aggiornaGrafico() {
+            const ctx = document.getElementById('graficoConsumi').getContext('2d');
+            const labels = Object.keys(totaliMacchinari);
+            const dati = Object.values(totaliMacchinari);
+            const grafico = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Litri di Gasolio',
+                        data: dati,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function aggiornaCapacitaRimanente() {
+            const capacitaBotte = parseFloat(document.getElementById("capacitaBotteInput").value);
+            const totaleLitri = registrazioni.reduce((acc, reg) => acc + reg.litri, 0);
+            const rimanente = capacitaBotte - totaleLitri;
+
+            const capacitaDiv = document.getElementById("capacitaRimanente");
+            capacitaDiv.textContent = `Capacità Rimanente: ${Math.max(0, rimanente)} litri`;
+        }
+
+        function resettaDati() {
+            if (confirm("Sei sicuro di voler resettare tutti i dati?")) {
+                registrazioni = [];
+                localStorage.removeItem('registrazioni');
+                aggiornaDashboard();
+            }
+        }
+
+        function generaReport() {
+            const reportContent = document.getElementById("reportContent");
+            reportContent.innerHTML = '';
+
+            registrazioni.forEach(reg => {
+                const p = document.createElement("p");
+                p.textContent = `${reg.data.toLocaleString()}: ${reg.macchinario} - ${reg.litri} litri`;
+                reportContent.appendChild(p);
+            });
+        }
+
+        function salvaReport() {
+            const report = JSON.stringify(registrazioni);
+            const blob = new Blob([report], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "report.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function aggiungiMacchinario() {
+            const nuovoMacchinario = document.getElementById("nuovoMacchinario").value.trim();
+            if (nuovoMacchinario) {
+                macchinari.push(nuovoMacchinario);
+                localStorage.setItem('macchinari', JSON.stringify(macchinari));
+                aggiornaSelezioneMacchinari();
+                document.getElementById("nuovoMacchinario").value = '';
+            } else {
+                alert("Inserisci un nome valido per il macchinario.");
+            }
+        }
+
+        function modificaMacchinario() {
+            const nuovoNome = document.getElementById("nuovoNomeMacchinario").value.trim();
+            const macchinarioSelezionato = document.getElementById("macchinario").value;
+            if (macchinarioSelezionato && nuovoNome) {
+                const index = macchinari.indexOf(macchinarioSelezionato);
+                if (index !== -1) {
+                    macchinari[index] = nuovoNome;
+                    localStorage.setItem('macchinari', JSON.stringify(macchinari));
+                    aggiornaSelezioneMacchinari();
+                    document.getElementById("nuovoNomeMacchinario").value = '';
+                }
+            } else {
+                alert("Seleziona un macchinario e inserisci un nuovo nome valido.");
+            }
+        }
+
+        function aggiungiPezzo() {
+            const nuovoPezzo = document.getElementById("nuovoPezzo").value.trim();
+            const quantita = parseInt(document.getElementById("quantitaPezzo").value);
+            const foto = document.getElementById("fotoPezzo").files[0];
+
+            if (nuovoPezzo && quantita > 0) {
+                const pezzo = {
+                    nome: nuovoPezzo,
+                    quantita: quantita,
+                    foto: foto ? URL.createObjectURL(foto) : ''
+                };
+                pezziRicambio.push(pezzo);
+                localStorage.setItem('pezziRicambio', JSON.stringify(pezziRicambio));
+                document.getElementById("nuovoPezzo").value = '';
+                document.getElementById("quantitaPezzo").value = '';
+                document.getElementById("fotoPezzo").value = '';
+                aggiornaListaPezzi();
+            } else {
+                alert("Inserisci un nome valido e una quantità.");
+            }
+        }
+
+        function aggiornaListaPezzi() {
+            const listaPezzi = document.getElementById("listaPezzi");
+            listaPezzi.innerHTML = '';
+            pezziRicambio.forEach((pezzo, index) => {
+                const li = document.createElement("li");
+                li.textContent = `${pezzo.nome} - Quantità: ${pezzo.quantita}`;
+                
+                if (pezzo.foto) {
+                    const img = document.createElement("img");
+                    img.src = pezzo.foto;
+                    li.appendChild(img);
+                }
+                
+                const modificaBtn = document.createElement("button");
+                modificaBtn.textContent = "Modifica";
+                modificaBtn.onclick = () => modificaPezzo(index);
+                
+                const eliminaBtn = document.createElement("button");
+                eliminaBtn.textContent = "Elimina";
+                eliminaBtn.onclick = () => eliminaPezzo(index);
+
+                li.appendChild(modificaBtn);
+                li.appendChild(eliminaBtn);
+                listaPezzi.appendChild(li);
+            });
+        }
+
+        function modificaPezzo(index) {
+            const pezzo = pezziRicambio[index];
+            document.getElementById("nuovoPezzo").value = pezzo.nome;
+            document.getElementById("quantitaPezzo").value = pezzo.quantita;
+            document.getElementById("fotoPezzo").value = '';
+            
+            // Elimina il pezzo dall'array per permettere l'aggiornamento
+            pezziRicambio.splice(index, 1);
+            localStorage.setItem('pezziRicambio', JSON.stringify(pezziRicambio));
+            aggiornaListaPezzi();
+        }
+
+        function eliminaPezzo(index) {
+            pezziRicambio.splice(index, 1);
+            localStorage.setItem('pezziRicambio', JSON.stringify(pezziRicambio));
+            aggiornaListaPezzi();
+        }
+
+        // Carica le registrazioni all'avvio
+        window.onload = function() {
+            registrazioni = JSON.parse(localStorage.getItem('registrazioni')) || [];
+            aggiornaDashboard();
+            aggiornaSelezioneMacchinari();
+            aggiornaListaPezzi();
+        };
+    </script>
+</body>
+</html>
